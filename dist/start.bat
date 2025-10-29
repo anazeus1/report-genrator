@@ -1,0 +1,1 @@
+java -jar rufbereitschaftszeiten-generator-1.0-SNAPSHOT.jar
