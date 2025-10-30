@@ -1,43 +1,47 @@
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
 import org.apache.poi.ss.usermodel.Cell
-import org.apache.poi.ss.usermodel.Workbook
 import org.apache.poi.ss.usermodel.WorkbookFactory
 import org.apache.poi.xssf.usermodel.XSSFCell
 import org.apache.poi.xssf.usermodel.XSSFRow
 import org.apache.poi.xssf.usermodel.XSSFSheet
+import org.apache.poi.xssf.usermodel.XSSFWorkbook
 
-import java.nio.file.Paths
 import java.time.ZoneId
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+
 /**
  * Company:   PSI Software SE
  * @author:  Anas Gharbi
  */
 
 class ExtractionService {
-    XSSFSheet einsatzPlanSheet
-    Workbook templateWorkbook
-    private static final Logger logger = LogManager.getLogger(ExtractionService.class);
+    XSSFSheet BHSSaleSheet
+    XSSFSheet templateSheet
+    XSSFWorkbook templateWorkbook
+    XSSFWorkbook ReportWorkbook
+    String templateFileName
+    Map<String,XSSFSheet> agentSheets = new HashMap<>()
+    Map<String,String> AgentList = new HashMap<String,String>()
+    private static final Logger logger = LogManager.getLogger(ExtractionService.class)
 
     /**
-     * extract einsatzPlan sheet from Wartungsliste.xlsx
+     * extract the report workbook
      *
-     * @param filename Wartungsliste workbook fileName
+     * @param workbook fileName
      */
-    def extractEinsatzPlanSheet(String fileName) {
+    def extractReportWorkbook(String fileName) {
         if(fileName.isEmpty()){
-            fileName ="./data/Wartungsliste_2025.xlsx"
+            fileName ="./data/report.xlsx"
         }
         InputStream inp = new FileInputStream(fileName)
-        def wb = WorkbookFactory.create(inp)
-        einsatzPlanSheet = wb.getSheetAt(1)
+        ReportWorkbook = WorkbookFactory.create(inp)
+        BHSSaleSheet = ReportWorkbook.getSheetAt(0)
     }
 
     /**
      * extract the template workbook from template.xlsx
-     *
+     * and the team list from first sheet
      * @param filename template workbook fileName
      */
     def extractTemplateSheets(String fileName) {
@@ -46,6 +50,20 @@ class ExtractionService {
         }
         InputStream inp = new FileInputStream(fileName)
         templateWorkbook = WorkbookFactory.create(inp)
+        templateWorkbook.forEach {sheet -> agentSheets[sheet.getSheetName()]=sheet}
+        def teamListSheet = templateWorkbook.getSheetAt(0)
+        templateSheet = templateWorkbook.getSheetAt(1)
+        for(int i=1;i < teamListSheet.size();i++){
+            XSSFRow row = teamListSheet.getRow(i)
+            String agentId = row.getCell(0)
+            String agentName = row.getCell(1)
+            /*if(agentName in agentSheets.keySet()){
+                createSheet(agentName,fileName)
+            }*/
+            agentList[agentId] =agentName
+        }
+        templateFileName = fileName
+
     }
 
     private static LocalDate getLocalDateFromCell(XSSFCell dateCell) {
@@ -69,45 +87,73 @@ class ExtractionService {
      *
      * @param givenDate a date formatted as yyyy-MM-dd that contains the month and year given in the ui
      */
-    def generateFilesByDate(LocalDate givenDate) {
-        def generated = []
+    def updateTeamMemberSheets(LocalDate givenDate) {
 
-        for (int i = 4; i < einsatzPlanSheet.size(); i++) {
-            def row = einsatzPlanSheet.getRow(i)
-            def dateCell = row.getCell(0)
+
+        for (int i = 1; i < BHSSaleSheet.size(); i++) {
+            def row = BHSSaleSheet.getRow(i)
+            def dateCell = row.getCell(9)
             def localDate = getLocalDateFromCell(dateCell)
             //includes current month and also last day in last month
-            boolean sameMonthAndYear = (localDate != null) && (givenDate.getYear() == localDate.getYear())
-                    && ((localDate.getDayOfYear() >= givenDate.getDayOfYear() - 1) &&
-                    (localDate.getDayOfYear() < givenDate.getDayOfYear() + givenDate.lengthOfMonth()))
+            boolean isAfterOrEqualToGivenDate = (localDate != null) && (localDate.isEqual(givenDate) || localDate.isAfter(givenDate))
 
-            if (sameMonthAndYear) {
-                def formatter = DateTimeFormatter.ofPattern("MMMM-yyyy")
-                def monthYear = givenDate.format(formatter)
+            if (isAfterOrEqualToGivenDate) {
 
-                for (int j = 7; j < row.size(); j++) {
-                    if (row.getCell(j).toString() == "w") {
-                        def teamMember = getCell(einsatzPlanSheet, 0, j + 1)
-                        def fileName = "${teamMember}-${monthYear}"
-                        def acronym = getCell(einsatzPlanSheet, 5, j)
+                def agentId = getCell(BHSSaleSheet, i, 0)
+                def agentName = AgentList[agentId]
+                def orderNumber = getCell(BHSSaleSheet,i , 6)
+                def segment = getCell(BHSSaleSheet,i , 7)
 
-                        if (fileName in generated) {
-                            setWorkTime(fileName, localDate, acronym)
-                        } else {
-                            generateFile(fileName, teamMember, givenDate, acronym)
-                            setWorkTime(fileName, localDate, acronym)
-                            generated.add(fileName)
-                            logger.info("${fileName} is generated")
-                        }
-                    }
+                if (agentId in agentList.keySet()) {
+                    addSegment(agentId,agentName, orderNumber,segment)
                 }
-
             }
         }
-        logger.info("${generated.size()} Excel files generated ")
+
 
     }
 
+    private void addSegment(String agentId,String agentName,String orderNumber, String segment){
+        XSSFSheet sheet = agentSheets[agentName]
+        if(sheet==null)
+            return
+        int lastRow = sheet.getLastRowNum()
+        int rowId
+        boolean orderNumberExists = false
+        //see if order is init
+        for(int i=0;i<=lastRow;i++){
+            def orderNumberOld = getCell(sheet,i,4)
+            println(orderNumber+"pld"+orderNumberOld)
+            if(orderNumber.equals(orderNumberOld))
+            {
+                println("equla")
+                rowId=i
+                orderNumberExists = true
+
+            }
+        }
+        if(!orderNumberExists){
+            rowId = lastRow+1
+            sheet.createRow(rowId)
+            setCell(sheet,rowId,4,orderNumber)
+        }
+        if(segment == "Internet"){
+            setCell(sheet,rowId,5,1);
+        }
+        else if(segment.contains("TV")){
+
+            setCell(sheet,rowId,6,1);
+        }
+        else if(segment=="HP"){
+            setCell(sheet,rowId,7,1);
+        }
+    }
+    public void saveFile(){
+        def newFile = new File("template_output.xlsx")
+        def out = new FileOutputStream(newFile)
+        templateWorkbook.write(out)
+        out.close()
+    }
     private static void setWorkTime(String fileName, LocalDate date, acronym) {
         try (InputStream inp = new FileInputStream("output/${fileName}.xlsx")) {
             def wb = WorkbookFactory.create(inp)
@@ -155,19 +201,13 @@ class ExtractionService {
      * @param date that contains the month and year given in the ui
      * @param acronym teamMemberAcronym
      */
-    def generateFile(String fileName, String teamMember, LocalDate date, String acronym) {
-        XSSFSheet sheet = templateWorkbook.getSheetAt(0)
+    def createSheet( String teamMember,String fileName) {
+        def newSheet = templateWorkbook.cloneSheet(1)
+        newSheet.setSheetName(1, "CopiedSheet") // rename
 
-        setCell(sheet, 1, 9, teamMember)
-        setCell(sheet, 2, 6, date)
-        setCell(sheet, 2, 9, acronym)
 
-        def outputDir = Paths.get("output").toFile()
-
-        if (!outputDir.exists()) {
-            outputDir.mkdirs()
-        }
-        try (OutputStream fileOut = new FileOutputStream("output/${fileName}.xlsx")) {
+        setCell(newSheet, 0, 0, teamMember)
+        try (OutputStream fileOut = new FileOutputStream(fileName)) {
             templateWorkbook.write(fileOut)
         }
     }
@@ -188,8 +228,9 @@ class ExtractionService {
 
     private static String getCell(XSSFSheet sheet, int rowindex, int cellIndex) {
         XSSFRow row = sheet.getRow(rowindex)
+        if (row == null) return null //row doest exist
         Cell cell = row.getCell(cellIndex)
-
+        if (cell == null) return null  // cell doesn't exist
         return cell.getStringCellValue()
     }
 }

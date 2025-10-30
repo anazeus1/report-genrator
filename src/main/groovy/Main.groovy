@@ -19,41 +19,41 @@ class Main {
     static void main(String[] args) {
         ExtractionService extractionService = new ExtractionService()
         //ui components
-        JFrame frame = new JFrame("Rufbereitschaftzeiten Generator")
+        JFrame frame = new JFrame("Tracker Report Generator")
         JPanel panel = new JPanel(new GridLayout(3, 1))
 
         JPanel row1 = new JPanel(new FlowLayout(FlowLayout.LEFT))
-        JLabel wartungsListeLabel = new JLabel("Geben Sie WartungsListe Excel datei pfade")
+        JLabel wartungsListeLabel = new JLabel("Pleas give the Report path.")
         JTextField wartungsListeField = new JTextField(50)
-        JButton confirmWartungslisteButton = new JButton("Bestätigen")
+        JButton confirmWartungslisteButton = new JButton("Confirm")
         row1.add(wartungsListeLabel)
         row1.add(wartungsListeField)
         row1.add(confirmWartungslisteButton)
 
         JPanel row2 = new JPanel(new FlowLayout(FlowLayout.LEFT))
-        JLabel templatePathLabel = new JLabel("Geben Sie templste Excel datei pfade")
+        JLabel templatePathLabel = new JLabel("Please give the Tracker Templat path.")
         JTextField templatePathField = new JTextField(50)
-        JButton confirmTemplateButton = new JButton("Bestätigen")
+        JButton confirmTemplateButton = new JButton("Confirm")
         row2.add(templatePathLabel)
         row2.add(templatePathField)
         row2.add(confirmTemplateButton)
 
         JPanel row3 = new JPanel(new FlowLayout(FlowLayout.LEFT))
-        JLabel dateLabel = new JLabel("Geben Sie ein Datum im Format MM-JJJJ ein:")
+        JLabel dateLabel = new JLabel("Give the Start Date")
         JTextField dateField = new JTextField(10)
-        JButton generateButton = new JButton("Generieren")
+        JButton generateButton = new JButton("Generate")
         row3.add(dateLabel)
         row3.add(dateField)
         row3.add(generateButton)
 
         confirmWartungslisteButton.addActionListener { l ->
             try {
-                extractionService.extractEinsatzPlanSheet(wartungsListeField.getText())
+                extractionService.extractReportWorkbook(wartungsListeField.getText())
             }
             catch (FileNotFoundException e) {
                 JOptionPane.showMessageDialog(null,
-                        "Wartungsliste Datei nicht gefunden",
-                        "Fehler",
+                        "Report file not Found.",
+                        "Error",
                         JOptionPane.ERROR_MESSAGE)
             }
         }
@@ -65,8 +65,8 @@ class Main {
                 }
                 catch (FileNotFoundException e) {
                     JOptionPane.showMessageDialog(null,
-                            "template Datei nicht gefunden",
-                            "Fehler",
+                            "Template file not Found.",
+                            "Error",
                             JOptionPane.ERROR_MESSAGE)
                 }
             }
@@ -74,24 +74,24 @@ class Main {
         generateButton.addActionListener(l -> {
             String date = dateField.getText()
             LocalDate ym = getDate(date)
-            if (extractionService.einsatzPlanSheet == null) {
+            if (extractionService.teamListSheet == null) {
                 JOptionPane.showMessageDialog(null,
-                        "die WartungsListe Datei noch nicht extrahiert wurde."+
-                                " Bitte stellen Sie sicher, dass Sie auf 'Bestätigen' geklickt haben.",
+                        "The Report file is not extracted yet."+
+                                " Please make sure you clicked confirm.",
                         "Fehler",
                         JOptionPane.ERROR_MESSAGE)
             } else if (extractionService.templateWorkbook == null) {
                 JOptionPane.showMessageDialog(null,
-                        "die Template Datei noch nicht extrahiert wurde."+
-                                " Bitte stellen Sie sicher, dass Sie auf 'Bestätigen' geklickt haben.",
-                        "Fehler",
+                        "The Template file is not extracted yet."+
+                                " Please make sure you clicked confirm.",
+                        "Error",
                         JOptionPane.ERROR_MESSAGE)
 
             } else if (ym != null) {
-                extractionService.generateFilesByDate(ym)
+                extractionService.updateTeamMemberSheets(ym)
                 JOptionPane.showMessageDialog(null,
-                        "Excel Dateien wurden generiert",
-                        "Erfolg",
+                        "Excel Sheets are being generated",
+                        "Succes!",
                         JOptionPane.INFORMATION_MESSAGE)
             }
         })
