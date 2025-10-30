@@ -126,7 +126,13 @@ class ExtractionService {
                 def segment = getCell(BHSSaleSheet, i, 7)
 
                 if (agentId in agentList.keySet()) {
-                    addSegment(localDate,agentName, orderNumber, segment)
+                    if (checkIfActivatedBRS(orderNumber, segment,BHSActSheet)) {
+                        addSegment(localDate, agentName, orderNumber, segment, activeStyle)
+                    } else if (localDate.isEqual(givenDate)) {
+                        addSegment(localDate, agentName, orderNumber, segment, waitStyle)
+                    } else {
+                        addSegment(localDate, agentName, orderNumber, segment,null)
+                    }
                 }
             }
         }
@@ -142,52 +148,94 @@ class ExtractionService {
                 def agentName = AgentList[agentId]
                 def orderNumber = getCell(MOBSaleSheet, i, 0)
                 if (agentId in agentList.keySet()) {
-                    addSegment(localDate, agentName, orderNumber, "MOB")
+                    if (checkIfActivatedMOB(orderNumber, MOBActSheet)) {
+                        addSegment(localDate, agentName, orderNumber, "MOB", activeStyle)
+                    } else if (localDate.isEqual(LocalDate.now())) {
+                        addSegment(localDate, agentName, orderNumber, "MOB", waitStyle)
+                    } else {
+                        addSegment(localDate, agentName, orderNumber, "MOB", null)
+                    }
+
                 }
             }
         }
     }
 
+    private boolean checkIfActivatedBRS(String orderNumber, String segment, XSSFSheet sheet) {
+        for (int i =0;i<sheet.size();i++) {
 
-    private void addSegment(LocalDate saleDate, String agentName, String orderNumber, String segment) {
+            def foundNumber = getCell(sheet,i,5)
+            def foundSegment = getCell(sheet,i,14)
+            if ((foundNumber==orderNumber)&& (foundSegment==segment) ){
+                return true;
+            }
+        }
+        return false;
+    }
+    private boolean checkIfActivatedMOB(String orderNumber, XSSFSheet sheet) {
+        for (int i=0;i<sheet.size();i++) {
+            if (getCell(sheet,i,0).equals(orderNumber)) {
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private void addSegment(LocalDate saleDate, String agentName, String orderNumber, String segment, CellStyle style) {
         XSSFSheet sheet = agentSheets[agentName]
         if (sheet == null)
             return
+
         int lastRow = sheet.getLastRowNum()
         int rowId
+
+        //see if order is initialised
         boolean orderNumberExists = false
-        //see if order is initilised
         for (int i = 0; i <= lastRow; i++) {
             def orderNumberOld = getCell(sheet, i, 4)
-            println(orderNumber + "pld" + orderNumberOld)
             if (orderNumber.equals(orderNumberOld)) {
-                println("equla")
                 rowId = i
                 orderNumberExists = true
+                break
             }
         }
+
         if (!orderNumberExists) {
             rowId = lastRow + 1
             sheet.createRow(rowId)
+
             //set order number
             setCell(sheet, rowId, 4, orderNumber)
 
             //set order date cell
-            def dateCell= sheet.getRow(rowId).createCell(2)
+            def dateCell = sheet.getRow(rowId).createCell(2)
             dateCell.setCellValue(saleDate)
             dateCell.setCellStyle(dateStyle)
         }
-        if (segment == "Internet") {
-            setCell(sheet, rowId, 5, 1);
-        } else if (segment.contains("TV")) {
 
-            setCell(sheet, rowId, 6, 1);
+        //set segment
+        def cellId
+        if (segment == "Internet") {
+            cellId = 5
+        } else if (segment.contains("TV")) {
+            cellId= 6
         } else if (segment == "HP") {
-            setCell(sheet, rowId, 7, 1);
+            cellId=7
+        } else if (segment == "MOB") {
+            cellId=8
         }
-        else if(segment =="MOB"){
-            setCell(sheet,rowId,8,1)
+        def cell=getCellNumeric(sheet,rowId,cellId)
+        if(cell==null){
+            setCell(sheet, rowId, cellId, 1);
         }
+        else{
+            print("yay")
+            setCell(sheet,rowId,cellId,cell+1)
+        }
+        if(style != null){
+            sheet.getRow(rowId).getCell(cellId).setCellStyle(style)
+        }
+
     }
 
     public void saveFile() {
@@ -276,5 +324,13 @@ class ExtractionService {
         if (cell == null) return null  // cell doesn't exist
         return cell.getStringCellValue()
     }
+    private static Integer getCellNumeric(XSSFSheet sheet, int rowindex, int cellIndex) {
+        XSSFRow row = sheet.getRow(rowindex)
+        if (row == null) return null //row doest exist
+        Cell cell = row.getCell(cellIndex)
+        if (cell == null) return null  // cell doesn't exist
+        return cell.getNumericCellValue()
+    }
+
 
 }
